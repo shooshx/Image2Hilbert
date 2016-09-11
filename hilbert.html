@@ -9,12 +9,16 @@ var ctx = null
 var x = 10, y = 10
 var imgctx = null
 
+var SZ = 256
+var WIDTH = 2*SZ
+var HEIGHT = SZ
+
 function start()
 {
     imgctx = imgCanvas.getContext('2d')
     //imgctx.drawImage(fromImg, 0, 0, 256, 256)
     imgctx.fillStyle = 'white'
-    imgctx.fillRect(0, 0, 256, 256)
+    imgctx.fillRect(0, 0, WIDTH, HEIGHT)
 
     makeCurve()
     
@@ -34,6 +38,7 @@ function handleMouseDown(event) {
 function handleMouseMove(event) {
     if (pressedInCanvas) {
         addCircle(event.clientX, event.clientY)
+        makeCurve()
     }
 }
 function handleMouseUp(event) {
@@ -52,31 +57,60 @@ function addCircle(cx, cy) {
     else if (brWh.checked)
         imgctx.fillStyle = 'white'
     
-    imgctx.fillRect(x, y, 10, 10)
+    imgctx.fillRect(x, y, 10, 10) // brush size
+}
+
+function triggerFileChanged() 
+{
+    if (editFileInput.files.length == 0)
+        return
+    var file = editFileInput.files[0]
+    
+    fromImg.onload = function() {
+        imgctx.fillRect(0, 0, WIDTH, HEIGHT)
+        imgctx.drawImage(fromImg, 0, 0, WIDTH, HEIGHT)
+        makeCurve()
+    }
+    var reader = new FileReader();
+    reader.onload = function(e) { 
+        fromImg.src = e.target.result //, blob.type
+    }
+    reader.onerror = function(e) {
+        console.log(e)
+    }
+    reader.readAsDataURL(file); // read as data URL since we want to put it in an img src
+
 }
 
 
 function makeCurve()
 {
-    var path = hilbertCurve()
+    var path = hilbertCurve(0)
     path = dedup(path);
-    
-    var text = outToSvg(path)
+
+    var path2 = hilbertCurve(256)
+    path2 = dedup(path2);
+
+    var text = outToSvg(path, path2)
     showSvg.innerHTML = text
+
 }
 
-function outToSvg(path) 
+function outToSvg(path, path2) 
 {
-    var sz = 256*3
-    var text = '<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="' + sz +'" height="'+ sz +'">'
-    text += '<g><polyline style="fill:none;stroke:#000000;" points="'
+    var sz = SZ*3
+    var text = '<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="' + (2*sz) +'" height="'+ sz +'">'
+    text += '<g><polyline id="pl1" style="fill:none;stroke:#000000;" points="'
     
-       //d="m 502.85714,262.3622 -180,92.85715 164.28572,134.28571 157.14285,-44.28571 28.57143,-185.71429 -17.14285,-102.85714"
-
     for(i = 0; i < path.length; ++i) {
         text += path[i][0] + "," + path[i][1] + " "
-        
     }
+  //  text += '"/><polyline id="pl2" style="fill:none;stroke:#000000;" points="'
+
+    for(i = 0; i < path2.length; ++i) {
+        text += (path2[i][0] + 768) + "," + path2[i][1] + " "
+    }
+    
     text += '"/></g></svg>'
     return text
 }
@@ -161,12 +195,19 @@ var hilbert = (function() {
   };
 })();
 
-function check(crd, cf) {
-    var x = crd[0]*cf, y = crd[1]*cf
+var imgData = null
+function preCheck() {
+    imgData = imgctx.getImageData(0, 0, 2*SZ, SZ);
+    
+}
+
+function check(crd, cf, xSampleOffset) 
+{
+    var x = crd[0]*cf + xSampleOffset, y = crd[1]*cf
     //return x + y < 256
     // this is slow
-    var imgData = imgctx.getImageData(x, y, 1, 1);
-    var r = imgData.data[0]
+    //var imgData = imgctx.getImageData(x, y, 1, 1);
+    var r = imgData.data[4*(y*WIDTH + x )]
     if (r < 50)
         return 2
     else if (r > 50 && r < 150)
@@ -174,8 +215,9 @@ function check(crd, cf) {
     return 0
 }
 
-function hilbertCurve() {
-
+function hilbertCurve(xSampleOffset) 
+{
+    preCheck()
     //var mx = 1 << (level * 2)
     var coord =[0,0]
     var lvl = 5
@@ -191,7 +233,7 @@ function hilbertCurve() {
     
     while(count < 540000)
     {
-        var curCheck = check(coord, cf)
+        var curCheck = check(coord, cf, xSampleOffset)
         if (curCheck != lastCheck || first) 
         {
             first = false
@@ -201,25 +243,23 @@ function hilbertCurve() {
                 seg = 12
                 cf = 4 
                 maxi = 64*64
-                var relFactor = prevCf / cf // 0.5 here
-                i = hilbert.xy2d(coord[0]*relFactor, coord[1]*relFactor, lvl)
             }
             else if (curCheck == 1) {
                 lvl = 7
                 seg = 6
                 cf = 2 
                 maxi = 128*128
-                var relFactor = prevCf / cf // 0.5 here
-                i = hilbert.xy2d(coord[0]*relFactor, coord[1]*relFactor, lvl)
             }
             else {
                 lvl = 8
                 seg = 3
                 cf = 1
                 maxi = 256*256
-                var relFactor = prevCf / cf // 2 here
-                i = hilbert.xy2d(coord[0]*relFactor, coord[1]*relFactor, lvl)
             }
+
+            var relFactor = prevCf / cf 
+            i = hilbert.xy2d(coord[0]*relFactor, coord[1]*relFactor, lvl)
+
             ++i // skip it to avoid a loop
         }
         else {
@@ -234,7 +274,7 @@ function hilbertCurve() {
         path.push([rx,ry])
     //    ctx.lineTo(rx + 10, ry + 10)
         ++count;
-        if (i >= maxi)
+        if (i > maxi-1)
             break;
        // if (rx > 253*3 && ry == 0)
        //     break;
@@ -259,15 +299,31 @@ function hilbertCurve() {
 #fromImg {
     display:none
 }
+#ctrl {
+
+}
+#editFileInput {
+    position: absolute;
+    top: 10px;
+    left: 100px;
+}
+#showSvg {
+    position: absolute;
+    top: 350;
+    margin:5px 0 5px 5px;
+}
+
 </style>
 <body onload="start()">
 <div id="ctrl">
   <input id="brWh" type="radio" name="brush" value="white">White<br>
   <input id="brGr" type="radio" name="brush" value="gray">Gray<br>
   <input id="brBl" type="radio" name="brush" value="black" checked>Black<br>
+   <input id="editFileInput" type="file" class="hidden" onchange="return triggerFileChanged()">
 </div>
-<canvas id="imgCanvas" width="256" height="256"></canvas>
-<span id="showSvg"></span>
+<canvas id="imgCanvas" width="512" height="256"></canvas><br>
+<div id="showSvg"></div>
+
 
 <img id="fromImg" src="test.png">
 </body>
