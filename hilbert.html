@@ -12,22 +12,58 @@ var imgctx = null
 function start()
 {
     imgctx = imgCanvas.getContext('2d')
-    imgctx.drawImage(fromImg, 0, 0, 256, 256)
+    //imgctx.drawImage(fromImg, 0, 0, 256, 256)
+    imgctx.fillStyle = 'white'
+    imgctx.fillRect(0, 0, 256, 256)
 
-    var path = hilbertCurve()
-
-    console.log("BEFORE="+path.length)
-    path = dedup(path);
-    console.log("AFTER="+path.length)
-    
-    var text = outToSvg(path)
-    showSvg.innerHTML = text
+    makeCurve()
     
    // outToCanvas(path)
 
-
+    imgCanvas.onmousedown = handleMouseDown
+    document.onmouseup = handleMouseUp
+    document.onmousemove = handleMouseMove
 }
 
+
+var pressedInCanvas = false
+function handleMouseDown(event) {
+    pressedInCanvas = true
+    addCircle(event.clientX, event.clientY)
+}
+function handleMouseMove(event) {
+    if (pressedInCanvas) {
+        addCircle(event.clientX, event.clientY)
+    }
+}
+function handleMouseUp(event) {
+    pressedInCanvas = false
+    makeCurve()
+}
+
+function addCircle(cx, cy) {
+    var rect = imgCanvas.getBoundingClientRect()
+    var x = cx - rect.left, y = cy - rect.top
+
+    if (brBl.checked)
+        imgctx.fillStyle = 'black'
+    else if (brGr.checked)
+        imgctx.fillStyle = 'gray'
+    else if (brWh.checked)
+        imgctx.fillStyle = 'white'
+    
+    imgctx.fillRect(x, y, 10, 10)
+}
+
+
+function makeCurve()
+{
+    var path = hilbertCurve()
+    path = dedup(path);
+    
+    var text = outToSvg(path)
+    showSvg.innerHTML = text
+}
 
 function outToSvg(path) 
 {
@@ -130,7 +166,12 @@ function check(crd, cf) {
     //return x + y < 256
     // this is slow
     var imgData = imgctx.getImageData(x, y, 1, 1);
-    return imgData.data[0] < 50
+    var r = imgData.data[0]
+    if (r < 50)
+        return 2
+    else if (r > 50 && r < 150)
+        return 1
+    return 0
 }
 
 function hilbertCurve() {
@@ -140,30 +181,44 @@ function hilbertCurve() {
     var lvl = 5
     var seg = 10
     var count = 0
-    var lastCheck = false
+    var lastCheck = -1
     var i = 0
-    var cf = 1
+    var cf = 1 // check factor
     var first = true
     var avoided = 0
-    
+    var maxi = 0
     var path = [coord]
     
     while(count < 540000)
     {
         var curCheck = check(coord, cf)
-        if (curCheck != lastCheck || first) {
+        if (curCheck != lastCheck || first) 
+        {
             first = false
-            if (curCheck) {
+            var prevCf = cf
+            if (curCheck == 0) {
+                lvl = 6
+                seg = 12
+                cf = 4 
+                maxi = 64*64
+                var relFactor = prevCf / cf // 0.5 here
+                i = hilbert.xy2d(coord[0]*relFactor, coord[1]*relFactor, lvl)
+            }
+            else if (curCheck == 1) {
                 lvl = 7
                 seg = 6
                 cf = 2 
-                i = hilbert.xy2d(coord[0]/2, coord[1]/2, lvl)
+                maxi = 128*128
+                var relFactor = prevCf / cf // 0.5 here
+                i = hilbert.xy2d(coord[0]*relFactor, coord[1]*relFactor, lvl)
             }
             else {
                 lvl = 8
                 seg = 3
                 cf = 1
-                i = hilbert.xy2d(coord[0]*2, coord[1]*2, lvl)
+                maxi = 256*256
+                var relFactor = prevCf / cf // 2 here
+                i = hilbert.xy2d(coord[0]*relFactor, coord[1]*relFactor, lvl)
             }
             ++i // skip it to avoid a loop
         }
@@ -179,51 +234,18 @@ function hilbertCurve() {
         path.push([rx,ry])
     //    ctx.lineTo(rx + 10, ry + 10)
         ++count;
-        if (rx > 253*3 && ry == 0)
+        if (i >= maxi)
             break;
+       // if (rx > 253*3 && ry == 0)
+       //     break;
         //console.log(" " + coord[0] + " " + coord[1]) 
         //console.log(" " + coord[0] + " " + coord[1]) 
     }
+
     return path
   
 }
 
-function hilbert(dir, rot, order) {
-    if (x > 100) {
-        dest = 0
-        sz = 5
-    }
-    else {
-        dest = 1
-        sz = 10
-    }
-    
-    if (order < dest) 
-        return; 
-    
-    dir = dir + rot; 
-    hilbert(dir, -rot, order - 1); 
-    step(dir, sz); 
-    dir = dir - rot; 
-    hilbert(dir, rot, order - 1); 
-    step(dir, sz); 
-    hilbert(dir, rot, order - 1); 
-    dir = dir - rot; 
-    step(dir, sz); 
-    hilbert(dir, -rot, order - 1); 
-} 
-
-function step(dir, sz) {
-    //var sz = 5 //10
-    switch(dir & 3) {
-    case 0: x = x + sz; break; 
-    case 1: y = y + sz; break; 
-    case 2: x = x - sz; break; 
-    case 3: y = y - sz; break; 
-    }
-    ctx.lineTo(x, y);
-    //ctx.stroke()
-}
 
 
 </script>
@@ -234,12 +256,18 @@ function step(dir, sz) {
 #imgCanvas {
     border: 1px black solid;
 }
+#fromImg {
+    display:none
+}
 </style>
 <body onload="start()">
-
-<div id="showSvg"></div>
-<canvas id="theCanvas" width="800" height="800"></canvas><br>
-<canvas id="imgCanvas" width="256" height="256"></canvas><br>
+<div id="ctrl">
+  <input id="brWh" type="radio" name="brush" value="white">White<br>
+  <input id="brGr" type="radio" name="brush" value="gray">Gray<br>
+  <input id="brBl" type="radio" name="brush" value="black" checked>Black<br>
+</div>
+<canvas id="imgCanvas" width="256" height="256"></canvas>
+<span id="showSvg"></span>
 
 <img id="fromImg" src="test.png">
 </body>
