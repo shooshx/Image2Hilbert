@@ -17,9 +17,9 @@ var HEIGHT = SZ
 function start()
 {
     imgctx = imgCanvas.getContext('2d')
-    //imgctx.drawImage(fromImg, 0, 0, 256, 256)
     imgctx.fillStyle = 'white'
     imgctx.fillRect(0, 0, WIDTH, HEIGHT)
+    imgctx.drawImage(fromImg, 0, 0, WIDTH, HEIGHT)
 
     makeCurve()
     
@@ -326,7 +326,7 @@ function hilbertCurve(xSampleOffset)
 <div id="showSvg"></div>
 
 
-<img id="fromImg" src="test.png">
+<img id="fromImg" src="cat_test.png">
 </body>
 
 </html>
