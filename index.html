@@ -170,9 +170,11 @@ function outToSvg(path, forExport)
     var szText = 'width="'+ w +'px" height="'+ h +'px"'
     if (forExport) {
         szText = 'width="297mm" height="210mm"'
+
+        var len = 210/h*dist;
+        console.log("Dist=" + Math.round(dist) + "px Length=" + Math.round(len) + "mm Count=" + count + "  wxh=" + w + "x" + h)
+        showLen.innerHTML = "Length=" + (Math.round(len) / 1000) + " meters"
     }
-    var len = 210/h*dist;
-    console.log("Dist=" + Math.round(dist) + "px Length=" + Math.round(len) + "mm Count=" + count + "  wxh=" + w + "x" + h)
     
     var text = '<svg xmlns="http://www.w3.org/2000/svg" version="1.1" ' + szText + ' viewBox="0 0 ' + w + ' ' + h + '">' +  polyline + '</svg>'
     return text
@@ -441,6 +443,10 @@ body {
 #showSize {
     margin: 0 0 0 10px;
 }
+#showLen {
+    position: absolute;
+    top: 1120px;
+}
 
 </style>
 <body onload="start()">
@@ -463,7 +469,8 @@ body {
    <div id="downCont"><input type="button" value="Generate SVG" onclick="triggerGenerateSvg()"><a id="downLink" href=""></a></div>
 </div>
 <canvas id="imgCanvas" width="512" height="256"></canvas><span id="showSize"></span><br>
-<div id="showSvg"></div>
+<div id="showSvg"></div><br>
+<div id="showLen"></div>
 
 
 <img id="fromImg" src="cat_test.png">
